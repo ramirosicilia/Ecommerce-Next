@@ -1,0 +1,108 @@
+
+
+.contenedor{ 
+    background-color: #145d90; 
+    height: auto;
+    padding: 3rem;
+
+
+}
+
+.titulo{
+    color:brown;
+    cursor: pointer;
+}
+
+.containerHeader{
+    display: flex;
+    margin-top: 1.5rem;
+    padding-left: 2rem;
+    width: 97%;
+    margin-top: 2rem;
+   justify-content: space-between;
+    align-items: center;
+} 
+
+.numero{
+    position: absolute;
+     font-size: 30px;
+     right: 16px;
+     top: 9px;
+     color: #145d90;
+}
+
+.contenedorCarrito{
+    width: 100%;
+    display: flex;
+    justify-content: start;
+    gap: 3rem;
+    padding: 2rem;
+    align-items: center;
+    color: rgb(238, 222, 222);
+}
+
+.items{
+     display: flex;
+    justify-content:start;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+
+} 
+
+.botones{
+    padding: 3px 6px;
+    background-color: #696f75;
+    color: white;
+    font-size: 17px;
+   
+   
+} 
+
+.imagen{
+    border-radius: 10px;
+    object-fit: cover;
+}
+
+.containerButton{
+    display: flex;
+    gap: .7rem;
+    margin-top: 2rem;
+    justify-content: center;
+    align-items: center;
+} 
+
+.containerCompra{
+     display: flex;
+    gap: 3rem;
+    margin-top: 2rem;
+    justify-content: center;
+    align-items: center;
+    color: bisque;
+
+} 
+
+.containerCart{
+     display: flex;
+    gap: 1rem;
+    flex-direction: column;
+  
+    justify-content: center;
+    align-items: center;
+    
+
+
+}
+
+.itemChildren{
+    font-size: 1.1875rem;
+}
+
+.comprar , .vaciar{
+    padding: 7px 60px;
+    background-color: rgb(123, 104, 206);
+    border-radius: 25px;
+    color: aliceblue;
+    letter-spacing: 1px;
+    border:  2px solid rgb(67, 218, 210);
+}

@@ -1,0 +1,18 @@
+
+
+.containerNav{
+    margin-top: 3rem;
+    width: 95%;
+    display: flex;
+    justify-content: end;
+    align-items: center;
+    gap: 1.5rem;
+} 
+
+
+.link{
+    text-decoration: none;
+    color: rgb(20, 20, 20);
+    font-size: 17px;
+    letter-spacing: 1px;
+}

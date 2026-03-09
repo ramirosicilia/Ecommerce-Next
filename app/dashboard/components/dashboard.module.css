@@ -1,0 +1,88 @@
+
+.titulo{
+    color: brown;
+}
+
+.container{
+
+width: 100%;
+height: auto;
+ box-sizing: border-box;
+margin-top: 3rem;
+padding: 2rem;
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+grid-template-rows: auto;
+gap: 2rem;
+background-color: #145d90; 
+
+} 
+
+.containerHeader{
+    display: flex;
+    margin-top: 1.5rem;
+    padding-left: 2rem;
+    width: 97%;
+    margin-top: 2rem;
+   justify-content: space-between;
+    align-items: center;
+}
+
+.numero{
+    position: absolute;
+     left: 1.2rem;
+     top:.7rem;
+    font-size: 1.8rem;
+    color: #145d90;
+    border-radius: 50%;
+    font-weight: bolder;  
+}
+
+.contenedor{
+    width: 280px;
+    height: 400px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1rem;
+    padding: 20px 30px;
+    align-items: center;
+    background-color: #233d4d;
+    border: 2px solid  #fe7f2d;
+    border-radius: 10px;
+    box-shadow: inset 5px 5px 10px #f4e2ce;
+   
+  
+} 
+
+.nombre{
+    font-size: 17px;
+    letter-spacing: 1px;
+    color:#f4e2ce;
+  
+}
+
+
+.imagen{
+     object-fit: cover;
+     border-radius: 10px;
+     
+}
+
+
+.precio , .categoria{
+    font-size: 17px;
+     color:#f4e2ce;
+          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+
+.boton{
+    padding: 7px 55px;
+    border-radius: 20px;
+     color:#f4e2ce;
+    border: none;
+    background-color: #fe7f2d;
+    font-weight: bolder;
+
+}
