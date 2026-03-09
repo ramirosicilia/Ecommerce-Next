@@ -66,9 +66,9 @@ export async function POST(req) {
       notification_url: `${process.env.URL_PAYMENTS}/api/orden`,
 
       back_urls: {
-        success: "https://personaldegastronomia.com",
-        failure: `https://personaldegastronomia.com/`,
-        pending: `https://personaldegastronomia.com/`
+        success: "ecommer-next.netlify.app/pago-exitoso",
+        failure: `ecommer-next.netlify.app`,
+        pending: `ecommer-next.netlify.app`
       },
 
       auto_return: "approved"
