@@ -66,9 +66,9 @@ export async function POST(req) {
       notification_url: `${process.env.URL_PAYMENTS}/api/orden`,
 
       back_urls: {
-        success: "ecommer-next.netlify.app/pago-exitoso",
-        failure: `ecommer-next.netlify.app`,
-        pending: `ecommer-next.netlify.app`
+        success: "https://ecommerce-next-rose-sigma.vercel.app/pago-exitoso",
+        failure: `https://ecommerce-next-rose-sigma.vercel.app/`,
+        pending: `https://ecommerce-next-rose-sigma.vercel.app/`
       },
 
       auto_return: "approved"
