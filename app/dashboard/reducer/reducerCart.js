@@ -4,6 +4,9 @@ export const  ReducerCart=(state,{type, payload})=>{
 
     switch (type) { 
 
+        case "cargar":
+         return action.payload
+
        
         case  "agregar": 
 

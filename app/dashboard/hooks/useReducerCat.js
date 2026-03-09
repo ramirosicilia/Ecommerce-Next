@@ -1,14 +1,33 @@
+
 "use client"
 
-import {useReducer } from "react"
+import { useEffect, useReducer } from "react"
 import { ReducerCart } from "../reducer/reducerCart.js"
 
-const initialState = localStorage.getItem("carrito")?JSON.parse(localStorage.getItem("carrito")):[]
-
 export const useReducerCart = () => {
-  const [state, dispatch] = useReducer(ReducerCart, initialState)
 
-  
+  const [state, dispatch] = useReducer(ReducerCart, [])
+
+  // cargar carrito desde localStorage
+  useEffect(() => {
+
+    const carrito = localStorage.getItem("carrito")
+
+    if (carrito) {
+      dispatch({
+        type: "cargar",
+        payload: JSON.parse(carrito)
+      })
+    }
+
+  }, [])
+
+  // guardar carrito cuando cambia
+  useEffect(() => {
+
+    localStorage.setItem("carrito", JSON.stringify(state))
+
+  }, [state])
 
   return { state, dispatch }
 }
