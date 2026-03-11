@@ -4,23 +4,50 @@ import { supabase } from "@/app/lib/supabase";
 import { randomUUID } from "crypto";
 
 export async function GET() {
+  console.log("🟢 GET webhook funcionando");
   return NextResponse.json({ ok: true });
 }
 
 export async function POST(req) {
+
+  console.log("🚀 WEBHOOK INICIADO");
+
   try {
 
-    const body = await req.json();
-    const { type, action, data } = body;
-    const id = data?.id;
+    const body = await req.json().catch(() => null);
 
-    console.log("📩 Webhook MercadoPago:", body);
+    console.log("📩 Webhook MercadoPago BODY:", body);
 
-    if (!id) {
+    if (!body) {
+      console.error("❌ Body vacío");
       return NextResponse.json({ ok: true });
     }
 
+    const { type, action, data } = body;
+
+    console.log("📦 type:", type);
+    console.log("📦 action:", action);
+    console.log("📦 data:", data);
+
+    const id = data?.id;
+
+    if (!id) {
+      console.warn("⚠️ No hay payment id");
+      return NextResponse.json({ ok: true });
+    }
+
+    console.log("💳 Payment ID recibido:", id);
+
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+
+    if (!accessToken) {
+      console.error("❌ ACCESS TOKEN NO DEFINIDO");
+      return NextResponse.json({ ok: true });
+    }
+
+    console.log("🔑 Access token OK");
+
+    console.log("📡 Consultando API MercadoPago...");
 
     const mpResponse = await axios.get(
       `https://api.mercadopago.com/v1/payments/${id}`,
@@ -31,7 +58,11 @@ export async function POST(req) {
       }
     );
 
+    console.log("✅ Respuesta MercadoPago recibida");
+
     const pago = mpResponse.data;
+
+    console.log("📄 Pago completo:", pago);
 
     const {
       status,
@@ -41,12 +72,23 @@ export async function POST(req) {
       metadata,
     } = pago;
 
+    console.log("💳 status:", status);
+    console.log("💳 payment_id:", payment_id);
+    console.log("💳 transaction_amount:", transaction_amount);
+    console.log("💳 external_reference:", external_reference);
+    console.log("💳 metadata:", metadata);
+
     const userId = metadata?.user_id;
     const carrito = metadata?.carrito;
     const total = metadata?.total;
 
-    // Guardar pago
-    await supabase.from("pagos").insert({
+    console.log("👤 userId:", userId);
+    console.log("🛒 carrito:", carrito);
+    console.log("💰 total:", total);
+
+    console.log("💾 Guardando pago en base de datos...");
+
+    const { error: pagoError } = await supabase.from("pagos").insert({
       pago_id: randomUUID(),
       payment_id: Number(payment_id),
       status,
@@ -55,8 +97,14 @@ export async function POST(req) {
       usuario_id: userId,
     });
 
+    if (pagoError) {
+      console.error("❌ Error guardando pago:", pagoError);
+    } else {
+      console.log("✅ Pago guardado");
+    }
+
     if (status !== "approved") {
-      console.log("⛔ Pago no aprobado");
+      console.log("⛔ Pago no aprobado, se detiene flujo");
       return NextResponse.json({ ok: true });
     }
 
@@ -67,35 +115,66 @@ export async function POST(req) {
 
     const externalReference = external_reference;
 
-    // Guardar carrito temporal
-    await supabase.from("carritos_temporales").insert({
-      id: randomUUID(),
-      carrito,
-      total,
-      external_reference: externalReference,
-      user_id: userId,
-      fecha_creacion: new Date().toISOString(),
-    });
+    console.log("🧾 externalReference:", externalReference);
 
-    // obtener carrito temporal
-    const { data: carritoTemp } = await supabase
+    console.log("💾 Guardando carrito temporal...");
+
+    const { error: carritoError } = await supabase
+      .from("carritos_temporales")
+      .insert({
+        id: randomUUID(),
+        carrito,
+        total,
+        external_reference: externalReference,
+        user_id: userId,
+        fecha_creacion: new Date().toISOString(),
+      });
+
+    if (carritoError) {
+      console.error("❌ Error guardando carrito temporal:", carritoError);
+    } else {
+      console.log("✅ Carrito temporal guardado");
+    }
+
+    console.log("🔎 Buscando carrito temporal...");
+
+    const { data: carritoTemp, error: carritoTempError } = await supabase
       .from("carritos_temporales")
       .select("*")
       .eq("external_reference", externalReference)
       .single();
 
+    if (carritoTempError) {
+      console.error("❌ Error obteniendo carrito temporal:", carritoTempError);
+    }
+
+    if (!carritoTemp) {
+      console.error("❌ carrito temporal no encontrado");
+      return NextResponse.json({ ok: true });
+    }
+
+    console.log("✅ carrito temporal encontrado:", carritoTemp);
+
     const carritoDb = carritoTemp.carrito;
     const totalDb = carritoTemp.total;
     const userIdDb = carritoTemp.user_id;
 
-    // eliminar pedido duplicado
+    console.log("🛒 carritoDb:", carritoDb);
+    console.log("💰 totalDb:", totalDb);
+    console.log("👤 userIdDb:", userIdDb);
+
+    console.log("🧹 Eliminando pedidos duplicados...");
+
     await supabase
       .from("pedidos")
       .delete()
       .eq("preference_id", externalReference);
 
-    // crear pedido
-    const { data: pedidoInsertado } = await supabase
+    console.log("✅ pedidos duplicados eliminados");
+
+    console.log("🧾 Creando pedido...");
+
+    const { data: pedidoInsertado, error: pedidoError } = await supabase
       .from("pedidos")
       .insert({
         pedido_id: randomUUID(),
@@ -108,29 +187,55 @@ export async function POST(req) {
       .select("pedido_id")
       .single();
 
+    if (pedidoError) {
+      console.error("❌ Error creando pedido:", pedidoError);
+      return NextResponse.json({ ok: true });
+    }
+
     const pedido_id = pedidoInsertado.pedido_id;
 
+    console.log("✅ Pedido creado:", pedido_id);
+
+    console.log("🔄 Procesando carrito...");
+
     for (const item of carritoDb) {
+
+      console.log("🛒 Item:", item);
+
       const { producto_id, color_nombre, talle_nombre, cantidad, unit_price } =
         item;
 
-      const { data: producto } = await supabase
+      console.log("🔎 Buscando producto:", producto_id);
+
+      const { data: producto, error: productoError } = await supabase
         .from("productos")
-        .select(
-          `
-        producto_id,
-        productos_variantes (
-          variante_id,
-          stock,
-          colores(insertar_color),
-          talles(insertar_talle)
-        )
-      `
-        )
+        .select(`
+          producto_id,
+          productos_variantes (
+            variante_id,
+            stock,
+            colores(insertar_color),
+            talles(insertar_talle)
+          )
+        `)
         .eq("producto_id", producto_id)
         .single();
 
-      const variantes = producto.productos_variantes;
+      if (productoError) {
+        console.error("❌ Error obteniendo producto:", productoError);
+        continue;
+      }
+
+      if (!producto) {
+        console.error("❌ producto no encontrado");
+        continue;
+      }
+
+      console.log("📦 producto encontrado:", producto);
+
+      const variantes = producto?.productos_variantes || [];
+
+      console.log("🎨 variantes:", variantes);
 
       const variante = variantes.find(
         (v) =>
@@ -142,38 +247,70 @@ export async function POST(req) {
               talle_nombre.toLowerCase())
       );
 
-      if (!variante) continue;
+      if (!variante) {
+        console.warn("⚠️ variante no encontrada");
+        continue;
+      }
+
+      console.log("✅ variante encontrada:", variante);
 
       const nuevoStock = variante.stock - cantidad;
 
-      if (nuevoStock < 0) continue;
+      console.log("📦 stock actual:", variante.stock);
+      console.log("📦 nuevo stock:", nuevoStock);
 
-      // actualizar stock
-      await supabase
+      if (nuevoStock < 0) {
+        console.warn("⚠️ stock insuficiente");
+        continue;
+      }
+
+      console.log("🔄 actualizando stock...");
+
+      const { error: stockError } = await supabase
         .from("productos_variantes")
         .update({ stock: nuevoStock })
         .eq("variante_id", variante.variante_id);
 
-      // insertar detalle pedido
-      await supabase.from("detalle_pedidos").insert({
-        detalle_pedido_id: randomUUID(),
-        pedido_id,
-        variante_id: variante.variante_id,
-        cantidad,
-        producto_id,
-        precio_unitario: unit_price,
-      });
+      if (stockError) {
+        console.error("❌ Error actualizando stock:", stockError);
+      } else {
+        console.log("✅ stock actualizado");
+      }
+
+      console.log("🧾 insertando detalle pedido...");
+
+      const { error: detalleError } = await supabase
+        .from("detalle_pedidos")
+        .insert({
+          detalle_pedido_id: randomUUID(),
+          pedido_id,
+          variante_id: variante.variante_id,
+          cantidad,
+          producto_id,
+          precio_unitario: unit_price,
+        });
+
+      if (detalleError) {
+        console.error("❌ Error insertando detalle:", detalleError);
+      } else {
+        console.log("✅ detalle pedido insertado");
+      }
+
     }
 
-    console.log("✅ Pedido creado:", pedido_id);
+    console.log("🎉 Pedido procesado completamente:", pedido_id);
 
     return NextResponse.json({ ok: true });
+
   } catch (error) {
-    console.error("❌ Error webhook:", error);
+
+    console.error("❌ Error webhook FATAL:", error);
+    console.error("❌ Stack:", error.stack);
 
     return NextResponse.json(
       { error: "internal error", detalle: error.message },
       { status: 500 }
     );
+
   }
 }
