@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
-import { supabase } from "@/app/lib/DB.js";
-import { v4 as uuidv4 } from "uuid";
+import { supabase } from "@/app/lib/supabase";
 
 export async function POST(req) {
 
@@ -9,24 +8,25 @@ export async function POST(req) {
 
     const body = await req.json();
 
-    console.log("📩 Webhook MercadoPago:", body);
+    const { type, action, data } = body;
 
-    const { type, data } = body;
+    const id = data?.id;
 
-    if (type !== "payment") {
-      return NextResponse.json({ ok: true });
+    console.log("Webhook recibido:", body);
+
+    if (!id || !type || !action) {
+      return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
     }
 
-    const paymentId = data?.id;
-
-    if (!paymentId) {
-      return NextResponse.json({ error: "payment id missing" }, { status: 400 });
+    if (type !== "payment" || action !== "payment.created") {
+      console.warn("Webhook ignorado");
+      return NextResponse.json({ ok: true });
     }
 
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
     const mpResponse = await axios.get(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      `https://api.mercadopago.com/v1/payments/${id}`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`
@@ -37,40 +37,25 @@ export async function POST(req) {
     const pago = mpResponse.data;
 
     const {
-      id,
       status,
+      id: payment_id,
       transaction_amount,
       external_reference,
       metadata
     } = pago;
 
-    console.log("💰 Pago:", pago);
-
-    // evitar duplicados
-    const { data: pagoExistente } = await supabase
+    await supabase
       .from("pagos")
-      .select("*")
-      .eq("payment_id", id)
-      .maybeSingle();
-
-    if (pagoExistente) {
-      console.log("⚠️ Pago ya procesado");
-      return NextResponse.json({ ok: true });
-    }
-
-    await supabase.from("pagos").insert([
-      {
-        pago_id: uuidv4(),
-        payment_id: Number(id),
+      .insert([{
+        payment_id: Number(payment_id),
         status,
-        preference_id: external_reference,
+        preference_id: external_reference || null,
         transaction_amount: Number(transaction_amount),
         usuario_id: metadata?.user_id || null
-      }
-    ]);
+      }]);
 
     if (status !== "approved") {
-      console.log("⛔ Pago no aprobado");
+      console.warn("Pago no aprobado");
       return NextResponse.json({ ok: true });
     }
 
@@ -78,104 +63,26 @@ export async function POST(req) {
     const userId = metadata?.user_id;
     const total = metadata?.total;
 
-    if (!carrito || !userId) {
-      console.log("❌ metadata incompleta");
-      return NextResponse.json({ ok: true });
+    if (!carrito || !userId || !total) {
+      return NextResponse.json({ error: "Metadata incompleta" }, { status: 400 });
     }
 
-    // crear pedido
-    const { data: pedido, error: errorPedido } = await supabase
-      .from("pedidos")
-      .insert([
-        {
-          usuario_id: userId,
-          total,
-          estado: "pagado",
-          preference_id: external_reference,
-          fecha_creacion: new Date().toISOString()
-        }
-      ])
-      .select("pedido_id")
-      .single();
-
-    if (errorPedido) {
-      console.error("❌ Error pedido:", errorPedido);
-      return NextResponse.json({ ok: true });
-    }
-
-    const pedido_id = pedido.pedido_id;
-
-    for (const item of carrito) {
-
-      const {
-        producto_id,
-        color_nombre,
-        talle_nombre,
-        cantidad,
-        unit_price
-      } = item;
-
-      const { data: producto } = await supabase
-        .from("productos")
-        .select(`
-          producto_id,
-          productos_variantes (
-            variante_id,
-            stock,
-            colores(insertar_color),
-            talles(insertar_talle)
-          )
-        `)
-        .eq("producto_id", producto_id)
-        .maybeSingle();
-
-      const variantes = producto?.productos_variantes || [];
-
-      const variante = variantes.find(v =>
-        (!color_nombre ||
-          v.colores?.insertar_color?.toLowerCase() === color_nombre.toLowerCase()) &&
-        (!talle_nombre ||
-          v.talles?.insertar_talle?.toLowerCase() === talle_nombre.toLowerCase())
-      );
-
-      if (!variante) {
-        console.log("⚠️ Variante no encontrada");
-        continue;
-      }
-
-      const nuevoStock = variante.stock - cantidad;
-
-      if (nuevoStock < 0) {
-        console.log("⚠️ stock insuficiente");
-        continue;
-      }
-
-      await supabase
-        .from("productos_variantes")
-        .update({ stock: nuevoStock })
-        .eq("variante_id", variante.variante_id);
-
-      await supabase.from("detalle_pedidos").insert([
-        {
-          pedido_id,
-          variante_id: variante.variante_id,
-          cantidad,
-          producto_id,
-          precio_unitario: unit_price
-        }
-      ]);
-    }
-
-    console.log("✅ Pedido creado:", pedido_id);
+    await supabase.from("carritos_temporales").insert([{
+      external_reference,
+      carrito,
+      user_id: userId,
+      total,
+      fecha_creacion: new Date().toISOString()
+    }]);
 
     return NextResponse.json({ ok: true });
 
   } catch (error) {
 
-    console.error("❌ Webhook error:", error);
+    console.error("Error webhook:", error);
 
     return NextResponse.json(
-      { error: "internal error", detalle: error.message },
+      { error: "Error interno", detalle: error.message },
       { status: 500 }
     );
   }
