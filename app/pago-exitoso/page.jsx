@@ -7,9 +7,11 @@ export default function PagoExitoso(){
   useEffect(()=>{
 
     localStorage.removeItem("carrito") 
-       window.location.reload()
+     
 
-  },[])
+  },[]) 
+
+
 
   return (
     <div>
