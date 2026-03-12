@@ -16,7 +16,7 @@ export const  ReducerCart=(state,action)=>{
 
          return  state?.map(p=>p.variante_id===action.payload.producto.variante_id&& p.cantidad>0?{...p,cantidad:p.cantidad-1}:p).filter(p=>p.cantidad>0)
 
-        case "limpiar": 
+        case "VACIAR_CARRITO": 
 
         return []
     
