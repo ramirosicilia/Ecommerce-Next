@@ -13,17 +13,12 @@ export async function POST(req) {
   console.log("🚀 [1] WEBHOOK RECIBIDO");
 
   try {
-
-    console.log("📥 [2] Leyendo body raw...");
-    const raw = await req.text();
-
-    console.log("📦 [3] RAW BODY:", raw);
-
-    let body = {};
+    
+    let body
+    
 
     try {
-      body = JSON.parse(raw);
-      console.log("✅ [4] Body parseado:", body);
+     body = await req.json();
     } catch (err) {
       console.log("⚠️ [4] Body no es JSON:", err);
     }
