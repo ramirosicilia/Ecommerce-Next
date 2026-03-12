@@ -14,7 +14,8 @@ export async function POST(req) {
 
   try {
 
-    const body = await req.json().catch(() => null);
+    const body = await req.json().catch(() => null); 
+      console.log("📩 Webhook RAW:", JSON.stringify(body, null, 2));
 
     console.log("📩 Webhook MercadoPago BODY:", body);
 
@@ -29,14 +30,20 @@ export async function POST(req) {
     console.log("📦 action:", action);
     console.log("📦 data:", data);
 
-   const id = body?.data?.id;
+    let id = body?.data?.id;
+
+    if (!id && body?.resource) {
+      id = body.resource.split("/").pop();
+    }
 
     if (!id) {
       console.warn("⚠️ No hay payment id");
       return NextResponse.json({ ok: true });
     }
 
-    console.log("💳 Payment ID recibido:", id);
+    console.log("💳 Payment ID recibido:", id); 
+
+  
 
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN; 
 
@@ -48,7 +55,13 @@ export async function POST(req) {
 
     console.log("🔑 Access token OK");
 
-    console.log("📡 Consultando API MercadoPago...");
+    console.log("📡 Consultando API MercadoPago..."); 
+
+    
+    if (body?.type !== "payment") {
+  console.log("⚠️ Evento ignorado:", body?.type)
+  return NextResponse.json({ ok: true })
+}
 
     const mpResponse = await axios.get(
       `https://api.mercadopago.com/v1/payments/${id}`,
@@ -59,11 +72,9 @@ export async function POST(req) {
       }
     ); 
 
- if (body?.type !== "payment") {
-  console.log("⚠️ Evento ignorado:", body?.type)
-  return NextResponse.json({ ok: true })
-}
+ 
     console.log("✅ Respuesta MercadoPago recibida");
+
 
     const pago = mpResponse?.data;
 
