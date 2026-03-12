@@ -24,9 +24,19 @@ export async function POST(req) {
       console.log("⚠️ Body no es JSON");
     }
 
-    const paymentId =
-      body?.data?.id || body?.resource?.split("/").pop();
+   let paymentId = null;
 
+if (body?.data?.id) {
+  paymentId = body.data.id;
+}
+
+if (!paymentId && body?.resource) {
+  paymentId = body.resource.split("/").pop();
+}
+
+if (!paymentId && body?.id) {
+  paymentId = body.id;
+}
     if (!paymentId) {
       console.log("⚠️ No payment id");
       return NextResponse.json({ ok: true });
