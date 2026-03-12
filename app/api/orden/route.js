@@ -29,7 +29,7 @@ export async function POST(req) {
     console.log("📦 action:", action);
     console.log("📦 data:", data);
 
-    const id = data?.id;
+   const id = body?.data?.id;
 
     if (!id) {
       console.warn("⚠️ No hay payment id");
@@ -38,7 +38,8 @@ export async function POST(req) {
 
     console.log("💳 Payment ID recibido:", id);
 
-    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN; 
+
 
     if (!accessToken) {
       console.error("❌ ACCESS TOKEN NO DEFINIDO");
@@ -56,7 +57,13 @@ export async function POST(req) {
           Authorization: `Bearer ${accessToken}`,
         },
       }
-    );
+    ); 
+
+    
+   if (body?.type !== "payment" || body?.action !== "payment.created") {
+  console.log("⚠️ Evento ignorado");
+  return NextResponse.json({ ok: true });
+}
 
     console.log("✅ Respuesta MercadoPago recibida");
 
@@ -108,10 +115,10 @@ export async function POST(req) {
       return NextResponse.json({ ok: true });
     }
 
-    if (!carrito || !userId || !total) {
-      console.error("❌ metadata incompleta");
-      return NextResponse.json({ error: "metadata incompleta" });
-    }
+    if (!metadata) {
+  console.log("⚠️ metadata vacía");
+  return NextResponse.json({ ok: true });
+}
 
     const externalReference = external_reference;
 
@@ -304,13 +311,12 @@ export async function POST(req) {
 
   } catch (error) {
 
-    console.error("❌ Error webhook FATAL:", error);
-    console.error("❌ Stack:", error.stack);
+  console.error("❌ Error webhook FATAL:", error)
+  console.error("❌ Stack:", error.stack)
 
-    return NextResponse.json(
-      { error: "internal error", detalle: error.message },
-      { status: 500 }
-    );
+  return NextResponse.json({
+    ok: true
+  })
 
-  }
+}
 }
