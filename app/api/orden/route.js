@@ -35,17 +35,27 @@ export async function POST(req) {
 
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
-    const mpResponse = await axios.get(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+   let pago;
 
-    const pago = mpResponse.data;
+try {
 
+ const mpResponse = await axios.get(
+  `https://api.mercadopago.com/v1/payments/${paymentId}`,
+  {
+   headers: {
+    Authorization: `Bearer ${accessToken}`,
+   },
+  }
+ );
+
+ pago = mpResponse.data;
+
+} catch (error) { 
+ 
+ console.log("⚠️ Pago no encontrado (test webhook)",error);
+ return NextResponse.json({ ok: true });
+
+}
     const {
       status,
       id,
