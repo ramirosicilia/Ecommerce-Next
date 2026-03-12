@@ -8,15 +8,16 @@ export async function GET() {
 }
 
 export async function POST(req) {
+
   console.log("🚀 WEBHOOK RECIBIDO");
 
   try {
 
-    // leer body seguro
     const raw = await req.text();
     console.log("RAW:", raw);
 
     let body = {};
+
     try {
       body = JSON.parse(raw);
     } catch {
@@ -35,27 +36,28 @@ export async function POST(req) {
 
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
-   let pago;
+    let pago;
 
-try {
+    try {
 
- const mpResponse = await axios.get(
-  `https://api.mercadopago.com/v1/payments/${paymentId}`,
-  {
-   headers: {
-    Authorization: `Bearer ${accessToken}`,
-   },
-  }
- );
+      const mpResponse = await axios.get(
+        `https://api.mercadopago.com/v1/payments/${paymentId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
 
- pago = mpResponse.data;
+      pago = mpResponse.data;
 
-} catch (error) { 
- 
- console.log("⚠️ Pago no encontrado (test webhook)",error);
- return NextResponse.json({ ok: true });
+    } catch (error) {
 
-}
+      console.log("⚠️ Pago no encontrado (test webhook)");
+      return NextResponse.json({ ok: true });
+
+    }
+
     const {
       status,
       id,
@@ -66,7 +68,18 @@ try {
 
     console.log("💳 Status:", status);
 
-    // guardar pago
+    // evitar duplicados
+    const { data: pagoExistente } = await supabase
+      .from("pagos")
+      .select("payment_id")
+      .eq("payment_id", Number(id))
+      .single();
+
+    if (pagoExistente) {
+      console.log("⚠️ Pago ya procesado");
+      return NextResponse.json({ ok: true });
+    }
+
     await supabase.from("pagos").insert({
       pago_id: randomUUID(),
       payment_id: Number(id),
@@ -81,11 +94,10 @@ try {
       return NextResponse.json({ ok: true });
     }
 
-    const carrito = metadata?.carrito || [];
-    const total = metadata?.total || 0;
-    const userId = metadata?.user_id;
+    const carrito = metadata?.carrito ?? [];
+    const total = metadata?.total ?? 0;
+    const userId = metadata?.user_id ?? null;
 
-    // crear pedido
     const { data: pedido } = await supabase
       .from("pedidos")
       .insert({
@@ -101,25 +113,26 @@ try {
 
     if (!pedido) return NextResponse.json({ ok: true });
 
-    const pedido_id = pedido.pedido_id;
-
-    // guardar detalle
     for (const item of carrito) {
+
       await supabase.from("detalle_pedidos").insert({
         detalle_pedido_id: randomUUID(),
-        pedido_id,
+        pedido_id: pedido.pedido_id,
         producto_id: item.producto_id,
         cantidad: item.cantidad,
         precio_unitario: item.unit_price,
       });
+
     }
 
-    console.log("✅ Pedido creado:", pedido_id);
+    console.log("✅ Pedido creado:", pedido.pedido_id);
 
     return NextResponse.json({ ok: true });
 
   } catch (error) {
+
     console.error("❌ Webhook error:", error);
     return NextResponse.json({ ok: true });
+
   }
 }
