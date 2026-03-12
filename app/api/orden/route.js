@@ -59,15 +59,13 @@ export async function POST(req) {
       }
     ); 
 
-    
-   if (body?.type !== "payment" || body?.action !== "payment.created") {
-  console.log("⚠️ Evento ignorado");
-  return NextResponse.json({ ok: true });
+ if (body?.type !== "payment") {
+  console.log("⚠️ Evento ignorado:", body?.type)
+  return NextResponse.json({ ok: true })
 }
-
     console.log("✅ Respuesta MercadoPago recibida");
 
-    const pago = mpResponse.data;
+    const pago = mpResponse?.data;
 
     console.log("📄 Pago completo:", pago);
 
