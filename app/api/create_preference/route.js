@@ -63,7 +63,7 @@ export async function POST(req) {
         total
       },
 
-      notification_url: `${process.env.URL_PAYMENTS}/api/orden`,
+      notification_url: `https://ecommerce-next-rose-sigma.vercel.app/api/orden`,
 
       back_urls: {
         success: "https://ecommerce-next-rose-sigma.vercel.app/pago-exitoso",
