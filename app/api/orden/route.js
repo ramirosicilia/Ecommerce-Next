@@ -12,12 +12,28 @@ export async function GET() {
 // POST webhook
 export async function POST(req) {
   try {
-    // Parseamos el body
-    const body = await req.json();
+
+    let body = {};
+
+    // Intentar leer JSON (cuando viene como JSON)
+    try {
+      body = await req.json();
+    } catch (e) {
+      body = {};
+    }
+
+    // Leer query params (MercadoPago muchas veces envía ?id=)
+    const url = new URL(req.url);
+    const queryId = url.searchParams.get("id");
+
+    if (queryId && !body?.data?.id) {
+      body.data = { id: queryId };
+    }
+
     console.log("🚀 WEBHOOK RECIBIDO:", body);
 
     // RESPONDEMOS RÁPIDO a Mercado Pago
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json({ ok: true }, { status: 200 });
 
     // Procesamiento pesado en segundo plano
     processWebhook(body).catch(err =>
@@ -25,9 +41,12 @@ export async function POST(req) {
     );
 
     return response;
+
   } catch (err) {
     console.error("❌ ERROR global webhook:", err);
-    return NextResponse.json({ ok: false });
+
+    // Siempre devolver 200 para que MercadoPago no marque error
+    return NextResponse.json({ ok: true }, { status: 200 });
   }
 }
 
