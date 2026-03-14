@@ -2,6 +2,7 @@ import { MercadoPagoConfig, Preference } from "mercadopago";
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
 
+export const runtime = "nodejs";
 
 const client = new MercadoPagoConfig({
   accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN,
@@ -17,19 +18,28 @@ export async function POST(req) {
     const { mp } = await req.json();
 
     if (!Array.isArray(mp) || mp.length === 0) {
-      return NextResponse.json({ error: "No hay productos en la compra." }, { status: 400 });
+      return NextResponse.json(
+        { error: "No hay productos en la compra." },
+        { status: 400 }
+      );
     }
 
     for (const item of mp) {
-      if (!item.id) {
-        return NextResponse.json({ error: "Algún producto no tiene id." }, { status: 400 });
+      if (!item.producto_id) {
+        return NextResponse.json(
+          { error: "Algún producto no tiene producto_id." },
+          { status: 400 }
+        );
       }
     }
 
     const userId = mp[0]?.user_id;
 
     if (!userId) {
-      return NextResponse.json({ error: "user_id no proporcionado" }, { status: 400 });
+      return NextResponse.json(
+        { error: "user_id no proporcionado" },
+        { status: 400 }
+      );
     }
 
     const carritoFormateado = mp.map(item => ({
@@ -38,23 +48,30 @@ export async function POST(req) {
       talle_nombre: item.talle_nombre,
       cantidad: item.quantity,
       unit_price: item.unit_price,
-      currency_id: "ARS",
+      currency_id: "ARS"
     }));
 
+
     const total = mp.reduce(
-      (acc, item) => acc + (Number(item.unit_price) * Number(item.quantity)),
+      (acc, item) =>
+        acc + (Number(item.unit_price) * Number(item.quantity)),
       0
     );
 
+
     const externalReference = uuidv4();
 
+
     const preferenceBody = {
+
       external_reference: externalReference,
+
       items: mp.map(item => ({
         id: item.producto_id,
         title: item.name,
         quantity: Number(item.quantity),
-        unit_price: Number(item.unit_price)
+        unit_price: Number(item.unit_price),
+        currency_id: "ARS"
       })),
 
       metadata: {
@@ -63,28 +80,45 @@ export async function POST(req) {
         total
       },
 
-      notification_url: `https://ecommerce-next-rose-sigma.vercel.app/api/orden`,
+      notification_url:
+        "https://ecommerce-next-rose-sigma.vercel.app/api/orden",
 
       back_urls: {
-        success: "https://ecommerce-next-rose-sigma.vercel.app/pago-exitoso",
-        failure: `https://ecommerce-next-rose-sigma.vercel.app/`,
-        pending: `https://ecommerce-next-rose-sigma.vercel.app/`
+        success:
+          "https://ecommerce-next-rose-sigma.vercel.app/pago-exitoso",
+        failure:
+          "https://ecommerce-next-rose-sigma.vercel.app/",
+        pending:
+          "https://ecommerce-next-rose-sigma.vercel.app/"
       },
 
       auto_return: "approved"
     };
 
-    const result = await preference.create({ body: preferenceBody });
 
-    return NextResponse.json({ id: result.id });
+    const result = await preference.create({
+      body: preferenceBody
+    });
+
+
+    console.log("✅ Preferencia creada:", result.id);
+
+    return NextResponse.json({
+      id: result.id
+    });
 
   } catch (error) {
 
-    console.error("Error crear preferencia:", error);
+    console.error("❌ Error crear preferencia:", error);
 
     return NextResponse.json(
-      { error: "Error interno", detalle: error.message },
+      {
+        error: "Error interno",
+        detalle: error.message
+      },
       { status: 500 }
     );
+
   }
+
 }
