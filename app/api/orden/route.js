@@ -1,4 +1,5 @@
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
@@ -6,31 +7,36 @@ import axios from "axios";
 import { supabase } from "@/app/lib/supabase";
 import { randomUUID } from "crypto";
 
-// GET para probar el endpoint
+
+// TEST ENDPOINT
 export async function GET() {
   console.log("🟢 GET /api/orden funcionando");
   return NextResponse.json({ ok: true });
 }
 
-// POST webhook
+
+// WEBHOOK
 export async function POST(req) {
+
   try {
 
     let body = {};
 
-    // intentar leer JSON (cuando viene como JSON)
+    // intentar leer JSON
     try {
       body = await req.json();
     } catch {
       body = {};
     }
 
-    // leer query params (MercadoPago normalmente envía esto)
+    // leer query params
     const url = new URL(req.url);
     const queryId = url.searchParams.get("id");
-    const topic = url.searchParams.get("topic") || url.searchParams.get("type");
+    const topic =
+      url.searchParams.get("topic") ||
+      url.searchParams.get("type");
 
-    // si el webhook vino sin JSON, armamos el objeto manualmente
+    // MercadoPago a veces manda solo query
     if (queryId && !body?.data?.id) {
       body = {
         type: topic || "payment",
@@ -38,12 +44,12 @@ export async function POST(req) {
       };
     }
 
-    console.log("🚀 WEBHOOK RECIBIDO:", body, "TOPIC:", topic);
+    console.log("🚀 WEBHOOK RECIBIDO:", body);
 
-    // responder inmediatamente a MercadoPago
+    // responder inmediatamente
     const response = NextResponse.json({ ok: true }, { status: 200 });
 
-    // procesamiento en background
+    // procesar en background
     processWebhook(body).catch(err =>
       console.error("❌ ERROR procesando webhook:", err)
     );
@@ -52,18 +58,20 @@ export async function POST(req) {
 
   } catch (err) {
 
-    console.error("❌ ERROR global webhook:", err);
+    console.error("❌ ERROR GLOBAL WEBHOOK:", err);
 
-    // MercadoPago necesita siempre 200
+    // MercadoPago necesita 200 SIEMPRE
     return NextResponse.json({ ok: true }, { status: 200 });
 
   }
+
 }
 
-// Función que hace todo el procesamiento
+
+// PROCESAMIENTO
 async function processWebhook(body) {
 
-  console.log("📦 Procesando webhook en background...");
+  console.log("📦 Procesando webhook...");
 
   const paymentId =
     body?.data?.id ||
@@ -80,7 +88,7 @@ async function processWebhook(body) {
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
   if (!accessToken) {
-    console.log("⛔ No hay access token de Mercado Pago");
+    console.log("⛔ Falta MERCADO_PAGO_ACCESS_TOKEN");
     return;
   }
 
@@ -111,21 +119,29 @@ async function processWebhook(body) {
     return;
   }
 
-  const { status, id, transaction_amount, external_reference, metadata } = pago;
+  const {
+    status,
+    id,
+    transaction_amount,
+    external_reference,
+    metadata
+  } = pago;
 
-  // verificar si el pago ya fue procesado
+
+  // VERIFICAR DUPLICADO
   const { data: pagoExistente } = await supabase
     .from("pagos")
     .select("payment_id")
     .eq("payment_id", Number(id))
-    .single();
+    .maybeSingle();
 
   if (pagoExistente) {
-    console.log("⚠️ Pago ya procesado, abortando");
+    console.log("⚠️ Pago ya procesado");
     return;
   }
 
-  // insertar pago
+
+  // INSERTAR PAGO
   const { error: errorInsertPago } = await supabase
     .from("pagos")
     .insert({
@@ -134,24 +150,30 @@ async function processWebhook(body) {
       status,
       preference_id: external_reference,
       transaction_amount,
-      usuario_id: metadata?.user_id || null,
+      usuario_id: metadata?.user_id || null
     });
 
-  if (errorInsertPago)
+  if (errorInsertPago) {
     console.log("❌ Error insertando pago:", errorInsertPago);
-  else
-    console.log("✅ Pago insertado correctamente");
-
-  if (status !== "approved") {
-    console.log("⛔ Pago no aprobado, se detiene el proceso");
     return;
   }
 
-  // crear pedido
+  console.log("✅ Pago guardado");
+
+
+  // SOLO CONTINUAR SI ESTÁ APROBADO
+  if (status !== "approved") {
+    console.log("⛔ Pago no aprobado:", status);
+    return;
+  }
+
+
   const carrito = metadata?.carrito ?? [];
   const total = metadata?.total ?? 0;
   const userId = metadata?.user_id ?? null;
 
+
+  // CREAR PEDIDO
   const { data: pedido, error: errorPedido } = await supabase
     .from("pedidos")
     .insert({
@@ -160,7 +182,7 @@ async function processWebhook(body) {
       total,
       estado: "pagado",
       preference_id: external_reference,
-      fecha_creacion: new Date().toISOString(),
+      fecha_creacion: new Date().toISOString()
     })
     .select("pedido_id")
     .single();
@@ -172,7 +194,8 @@ async function processWebhook(body) {
 
   console.log("📦 Pedido creado:", pedido);
 
-  // insertar detalles
+
+  // INSERTAR DETALLES
   for (const item of carrito) {
 
     const { error: errorDetalle } = await supabase
@@ -182,14 +205,15 @@ async function processWebhook(body) {
         pedido_id: pedido.pedido_id,
         producto_id: item.producto_id,
         cantidad: item.cantidad,
-        precio_unitario: item.unit_price,
+        precio_unitario: item.unit_price
       });
 
     if (errorDetalle)
-      console.log("❌ Error insertando detalle:", errorDetalle);
+      console.log("❌ Error detalle:", errorDetalle);
     else
       console.log("✅ Detalle insertado:", item);
   }
 
-  console.log("🎉 Pedido completo procesado:", pedido.pedido_id);
+  console.log("🎉 Pedido completo:", pedido.pedido_id);
+
 }
