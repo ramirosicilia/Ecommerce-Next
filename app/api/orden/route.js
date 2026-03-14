@@ -1,3 +1,6 @@
+export const dynamic = "force-dynamic";
+
+
 import { NextResponse } from "next/server";
 import axios from "axios";
 import { supabase } from "@/app/lib/supabase";
@@ -15,38 +18,40 @@ export async function POST(req) {
 
     let body = {};
 
-    // Intentar leer JSON (cuando viene como JSON)
+    // intentar leer JSON
     try {
       body = await req.json();
-    } catch (e) {
+    } catch {
       body = {};
     }
 
-    // Leer query params (MercadoPago muchas veces envía ?id=)
+    // leer query params (MercadoPago usa esto)
     const url = new URL(req.url);
     const queryId = url.searchParams.get("id");
+    const topic = url.searchParams.get("topic") || url.searchParams.get("type");
 
     if (queryId && !body?.data?.id) {
       body.data = { id: queryId };
     }
 
-    console.log("🚀 WEBHOOK RECIBIDO:", body);
+    console.log("🚀 WEBHOOK RECIBIDO:", body, "TOPIC:", topic);
 
-    // RESPONDEMOS RÁPIDO a Mercado Pago
+    // responder inmediatamente
     const response = NextResponse.json({ ok: true }, { status: 200 });
 
-    // Procesamiento pesado en segundo plano
     processWebhook(body).catch(err =>
-      console.error("❌ ERROR procesando webhook en background:", err)
+      console.error("❌ ERROR procesando webhook:", err)
     );
 
     return response;
 
   } catch (err) {
+
     console.error("❌ ERROR global webhook:", err);
 
-    // Siempre devolver 200 para que MercadoPago no marque error
+    // MercadoPago necesita SIEMPRE 200
     return NextResponse.json({ ok: true }, { status: 200 });
+
   }
 }
 
@@ -54,37 +59,49 @@ export async function POST(req) {
 async function processWebhook(body) {
   console.log("📦 Procesando webhook en background...");
 
-  // Obtener paymentId
   const paymentId = body?.data?.id || body?.id || (body?.resource?.split("/").pop());
+
   if (!paymentId) {
     console.log("⛔ No se pudo obtener paymentId");
     return;
   }
+
   console.log("💳 Payment ID:", paymentId);
 
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+
   if (!accessToken) {
     console.log("⛔ No hay access token de Mercado Pago");
     return;
   }
 
-  // Consultar pago en Mercado Pago
   let pago;
+
   try {
+
     const mpResponse = await axios.get(
       `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`
+        }
+      }
     );
+
     pago = mpResponse.data;
+
     console.log("📦 Datos del pago:", pago);
+
   } catch (err) {
+
     console.log("⚠️ Error consultando MercadoPago:", err?.response?.data || err.message);
+
     return;
+
   }
 
   const { status, id, transaction_amount, external_reference, metadata } = pago;
 
-  // Verificar si ya existe
   const { data: pagoExistente } = await supabase
     .from("pagos")
     .select("payment_id")
@@ -96,7 +113,6 @@ async function processWebhook(body) {
     return;
   }
 
-  // Insertar pago
   const { error: errorInsertPago } = await supabase.from("pagos").insert({
     pago_id: randomUUID(),
     payment_id: Number(id),
@@ -105,6 +121,7 @@ async function processWebhook(body) {
     transaction_amount,
     usuario_id: metadata?.user_id || null,
   });
+
   if (errorInsertPago) console.log("❌ Error insertando pago:", errorInsertPago);
   else console.log("✅ Pago insertado correctamente");
 
@@ -113,7 +130,6 @@ async function processWebhook(body) {
     return;
   }
 
-  // Crear pedido
   const carrito = metadata?.carrito ?? [];
   const total = metadata?.total ?? 0;
   const userId = metadata?.user_id ?? null;
@@ -138,8 +154,8 @@ async function processWebhook(body) {
 
   console.log("📦 Pedido creado:", pedido);
 
-  // Insertar detalle de pedidos
   for (const item of carrito) {
+
     const { error: errorDetalle } = await supabase.from("detalle_pedidos").insert({
       detalle_pedido_id: randomUUID(),
       pedido_id: pedido.pedido_id,
@@ -147,8 +163,10 @@ async function processWebhook(body) {
       cantidad: item.cantidad,
       precio_unitario: item.unit_price,
     });
+
     if (errorDetalle) console.log("❌ Error insertando detalle:", errorDetalle);
     else console.log("✅ Detalle insertado:", item);
+
   }
 
   console.log("🎉 Pedido completo procesado:", pedido.pedido_id);
