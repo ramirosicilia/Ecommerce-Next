@@ -22,15 +22,14 @@ export async function POST(req) {
 
     let body = {};
 
-    // intentar leer JSON
     try {
       body = await req.json();
     } catch {
       body = {};
     }
 
-    // leer query params
     const url = new URL(req.url);
+
     const queryId = url.searchParams.get("id");
     const topic =
       url.searchParams.get("topic") ||
@@ -46,10 +45,8 @@ export async function POST(req) {
 
     console.log("🚀 WEBHOOK RECIBIDO:", body);
 
-    // responder inmediatamente
     const response = NextResponse.json({ ok: true }, { status: 200 });
 
-    // procesar en background
     processWebhook(body).catch(err =>
       console.error("❌ ERROR procesando webhook:", err)
     );
@@ -60,7 +57,6 @@ export async function POST(req) {
 
     console.error("❌ ERROR GLOBAL WEBHOOK:", err);
 
-    // MercadoPago necesita 200 SIEMPRE
     return NextResponse.json({ ok: true }, { status: 200 });
 
   }
@@ -76,9 +72,7 @@ async function processWebhook(body) {
   const paymentId =
     body?.data?.id ||
     body?.id ||
-    body?.resource?.split("/")?.pop(); 
-
-    console.log("STATUS DEL PAGO:", status);
+    body?.resource?.split("/")?.pop();
 
   if (!paymentId) {
     console.log("⛔ No se pudo obtener paymentId");
@@ -109,8 +103,6 @@ async function processWebhook(body) {
 
     pago = mpResponse.data;
 
-    console.log("📦 Datos del pago:", pago);
-
   } catch (err) {
 
     console.log(
@@ -128,6 +120,9 @@ async function processWebhook(body) {
     external_reference,
     metadata
   } = pago;
+
+  console.log("📦 Datos del pago:", pago);
+  console.log("STATUS DEL PAGO:", status);
 
 
   // VERIFICAR DUPLICADO
@@ -214,6 +209,7 @@ async function processWebhook(body) {
       console.log("❌ Error detalle:", errorDetalle);
     else
       console.log("✅ Detalle insertado:", item);
+
   }
 
   console.log("🎉 Pedido completo:", pedido.pedido_id);
