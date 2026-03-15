@@ -76,7 +76,9 @@ async function processWebhook(body) {
   const paymentId =
     body?.data?.id ||
     body?.id ||
-    body?.resource?.split("/")?.pop();
+    body?.resource?.split("/")?.pop(); 
+
+    console.log("STATUS DEL PAGO:", status);
 
   if (!paymentId) {
     console.log("⛔ No se pudo obtener paymentId");
