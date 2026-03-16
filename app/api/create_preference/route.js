@@ -81,7 +81,7 @@ export async function POST(req) {
       },
 
       notification_url:
-        "https://ecommerce-next-rose-sigma.vercel.app/api/orden",
+        "https://ecommerce-next-rose-sigma.vercel.app/app/api/order",
 
       back_urls: {
         success:
