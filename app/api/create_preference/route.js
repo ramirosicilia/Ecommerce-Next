@@ -44,6 +44,7 @@ export async function POST(req) {
 
     const carritoFormateado = mp.map(item => ({
       producto_id: item.producto_id,
+      variante_id:item.id,
       color_nombre: item.color_nombre,
       talle_nombre: item.talle_nombre,
       cantidad: item.quantity,

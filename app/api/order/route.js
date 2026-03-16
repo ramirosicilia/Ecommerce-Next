@@ -124,6 +124,7 @@ async function processWebhook(body) {
   for (const item of carrito) {
     const { error: errorDetalle } = await supabase.from("detalle_pedidos").insert({
       detalle_pedido_id: randomUUID(),
+      variante_id:item.variante_id,
       pedido_id: pedido.pedido_id,
       producto_id: item.producto_id,
       cantidad: item.cantidad,
