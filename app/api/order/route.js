@@ -10,7 +10,7 @@ import { randomUUID } from "crypto";
 
 // TEST ENDPOINT
 export async function GET() {
-  console.log("🟢 GET /api/orden funcionando");
+  console.log("🟢 GET /api/order funcionando");
   return NextResponse.json({ ok: true });
 }
 
