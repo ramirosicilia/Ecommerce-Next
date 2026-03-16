@@ -35,7 +35,6 @@ export async function POST(req) {
       url.searchParams.get("topic") ||
       url.searchParams.get("type");
 
-    // MercadoPago a veces manda solo query
     if (queryId && !body?.data?.id) {
       body = {
         type: topic || "payment",
@@ -158,16 +157,29 @@ async function processWebhook(body) {
   console.log("✅ Pago guardado");
 
 
-  // SOLO CONTINUAR SI ESTÁ APROBADO
   if (status !== "approved") {
     console.log("⛔ Pago no aprobado:", status);
     return;
   }
 
 
-  const carrito = metadata?.carrito ?? [];
-  const total = metadata?.total ?? 0;
-  const userId = metadata?.user_id ?? null;
+  // 🔵 OBTENER CARRITO DESDE carritos_temporales
+  const { data: carritoTemp, error: errorTemp } = await supabase
+    .from("carritos_temporales")
+    .select("*")
+    .eq("external_reference", external_reference)
+    .maybeSingle();
+
+  if (errorTemp || !carritoTemp) {
+    console.log("❌ No se encontró carrito temporal:", errorTemp);
+    return;
+  }
+
+  const carrito = carritoTemp.carrito;
+  const total = carritoTemp.total;
+  const userId = carritoTemp.user_id;
+
+  console.log("🛒 Carrito recuperado:", carrito);
 
 
   // CREAR PEDIDO
