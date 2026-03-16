@@ -35,6 +35,7 @@ export async function POST(req) {
       url.searchParams.get("topic") ||
       url.searchParams.get("type");
 
+    // MercadoPago a veces manda solo query
     if (queryId && !body?.data?.id) {
       body = {
         type: topic || "payment",
@@ -78,9 +79,7 @@ async function processWebhook(body) {
     return;
   }
 
-  const paymentIdNumber = Number(paymentId);
-
-  console.log("💳 Payment ID:", paymentIdNumber);
+  console.log("💳 Payment ID:", paymentId);
 
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
@@ -94,7 +93,7 @@ async function processWebhook(body) {
   try {
 
     const mpResponse = await axios.get(
-      `https://api.mercadopago.com/v1/payments/${paymentIdNumber}`,
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`
@@ -124,7 +123,6 @@ async function processWebhook(body) {
 
   console.log("📦 Datos del pago:", pago);
   console.log("STATUS DEL PAGO:", status);
-  console.log("external_reference:", external_reference);
 
 
   // VERIFICAR DUPLICADO
@@ -160,36 +158,16 @@ async function processWebhook(body) {
   console.log("✅ Pago guardado");
 
 
-  // SOLO PROCESAR PEDIDO SI ESTA APROBADO
+  // SOLO CONTINUAR SI ESTÁ APROBADO
   if (status !== "approved") {
     console.log("⛔ Pago no aprobado:", status);
     return;
   }
 
 
-  if (!external_reference) {
-    console.log("❌ external_reference no existe");
-    return;
-  }
-
-
-  // 🔵 OBTENER CARRITO DESDE carritos_temporales
-  const { data: carritoTemp, error: errorTemp } = await supabase
-    .from("carritos_temporales")
-    .select("*")
-    .eq("external_reference", external_reference)
-    .maybeSingle();
-
-  if (errorTemp || !carritoTemp) {
-    console.log("❌ No se encontró carrito temporal:", errorTemp);
-    return;
-  }
-
-  const carrito = carritoTemp.carrito;
-  const total = carritoTemp.total;
-  const userId = carritoTemp.user_id;
-
-  console.log("🛒 Carrito recuperado:", carrito);
+  const carrito = metadata?.carrito ?? [];
+  const total = metadata?.total ?? 0;
+  const userId = metadata?.user_id ?? null;
 
 
   // CREAR PEDIDO
