@@ -65,7 +65,7 @@ const ViewCart = ({imagenes}) => {
 
     function limpiar() { 
 
-      dispatch({type:"limpiar",payload:[]}) 
+      dispatch({type:"limpiar"}) 
 
       localStorage.removeItem("carrito")
       
