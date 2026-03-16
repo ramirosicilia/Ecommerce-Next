@@ -1,7 +1,7 @@
 "use client"
 
 import { useContext, useEffect } from "react"
-import { createContextCart } from "../../Context/ContextoCart"
+import { createContextCart } from "../dashboard/Context/ContextoCart"
 
 export default function PagoExitoso(){
 
