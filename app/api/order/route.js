@@ -74,9 +74,26 @@ async function processWebhook(body) {
     return;
   }
 
-  const { status, id, transaction_amount, external_reference, metadata } = pago;
+  const {
+    status,
+    id,
+    transaction_amount,
+    external_reference,
+    metadata,
+    date_created,
+  } = pago;
 
   console.log("💰 Status:", status);
+
+  // 🔒 PROTECCIÓN PAGOS VIEJOS
+  const fechaPago = new Date(date_created);
+  const ahora = new Date();
+  const diferenciaMin = (ahora - fechaPago) / 1000 / 60;
+
+  if (diferenciaMin > 10) {
+    console.log("⛔ Pago viejo reenviado por MercadoPago, ignorando");
+    return;
+  }
 
   // Verificar si el pago ya existe
   const { data: pagoExistente } = await supabase
@@ -111,7 +128,7 @@ async function processWebhook(body) {
     return;
   }
 
-  // 🔒 NUEVA PROTECCIÓN: verificar si ya existe pedido
+  // 🔒 PROTECCIÓN PEDIDO DUPLICADO
   const { data: pedidoExistente } = await supabase
     .from("pedidos")
     .select("pedido_id")
