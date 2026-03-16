@@ -98,10 +98,11 @@ export async function POST(req) {
         currency_id: "ARS"
       })),
 
-      metadata: {
-        user_id: userId
-      },
-
+     metadata: {
+      user_id: userId,
+      carrito: carritoFormateado,
+       total
+     },
       notification_url:
         "https://ecommerce-next-rose-sigma.vercel.app/api/order",
 
