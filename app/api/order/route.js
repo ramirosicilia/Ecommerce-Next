@@ -78,7 +78,9 @@ async function processWebhook(body) {
     return;
   }
 
-  console.log("💳 Payment ID:", paymentId);
+  const paymentIdNumber = Number(paymentId);
+
+  console.log("💳 Payment ID:", paymentIdNumber);
 
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
@@ -92,7 +94,7 @@ async function processWebhook(body) {
   try {
 
     const mpResponse = await axios.get(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      `https://api.mercadopago.com/v1/payments/${paymentIdNumber}`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`
@@ -122,6 +124,7 @@ async function processWebhook(body) {
 
   console.log("📦 Datos del pago:", pago);
   console.log("STATUS DEL PAGO:", status);
+  console.log("external_reference:", external_reference);
 
 
   // VERIFICAR DUPLICADO
@@ -157,8 +160,15 @@ async function processWebhook(body) {
   console.log("✅ Pago guardado");
 
 
+  // SOLO PROCESAR PEDIDO SI ESTA APROBADO
   if (status !== "approved") {
     console.log("⛔ Pago no aprobado:", status);
+    return;
+  }
+
+
+  if (!external_reference) {
+    console.log("❌ external_reference no existe");
     return;
   }
 
