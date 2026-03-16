@@ -1,20 +1,17 @@
 "use client"
 
-import { useContext, useEffect } from "react"
-import { createContextCart } from "../dashboard/Context/ContextoCart"
+import {  useEffect } from "react"
+
 
 export default function PagoExitoso(){
 
-  const { dispatch } = useContext(createContextCart)
+
 
   useEffect(() => {
 
     localStorage.removeItem("carrito")
 
-    dispatch({
-      type:"VACIAR_CARRITO"
-    })
-
+   
   }, [])
 
   return (
