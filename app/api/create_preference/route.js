@@ -1,7 +1,6 @@
 import { MercadoPagoConfig, Preference } from "mercadopago";
 import { NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
-import { supabase } from "@/app/lib/DB.js";
 
 export const runtime = "nodejs";
 
@@ -63,29 +62,6 @@ export async function POST(req) {
     const externalReference = uuidv4();
 
 
-    // 🔵 GUARDAR CARRITO TEMPORAL
-    const { error: errorCarrito } = await supabase
-      .from("carritos_temporales")
-      .insert({
-        id: uuidv4(),
-        carrito: carritoFormateado,
-        total,
-        fecha_creacion: new Date().toISOString(),
-        external_reference: externalReference,
-        user_id: userId
-      });
-
-    if (errorCarrito) {
-      console.log("❌ Error guardando carrito temporal:", errorCarrito);
-      return NextResponse.json(
-        { error: "Error guardando carrito" },
-        { status: 500 }
-      );
-    }
-
-    console.log("🛒 Carrito temporal guardado");
-
-
     const preferenceBody = {
 
       external_reference: externalReference,
@@ -99,8 +75,8 @@ export async function POST(req) {
       })),
 
       metadata: {
-        user_id: userId,
         carrito: carritoFormateado,
+        user_id: userId,
         total
       },
 
