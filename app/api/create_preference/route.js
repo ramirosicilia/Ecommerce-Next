@@ -70,6 +70,7 @@ export async function POST(req) {
       items: mp.map(item => ({
         id: item.producto_id,
         title: item.name,
+        variante_id:item.id,
         quantity: Number(item.quantity),
         unit_price: Number(item.unit_price),
         currency_id: "ARS"

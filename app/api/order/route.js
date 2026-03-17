@@ -13,17 +13,14 @@ export async function GET() {
 // POST webhook
 export async function POST(req) {
   try {
-
     let body = {};
 
-    // Intentar leer JSON (cuando viene como JSON)
     try {
       body = await req.json();
-    } catch () {
+    } catch {
       body = {};
     }
 
-    // Leer query params (MercadoPago muchas veces envía ?id=)
     const url = new URL(req.url);
     const queryId = url.searchParams.get("id");
 
@@ -33,43 +30,40 @@ export async function POST(req) {
 
     console.log("🚀 WEBHOOK RECIBIDO:", body);
 
-    // RESPONDEMOS RÁPIDO a Mercado Pago
     const response = NextResponse.json({ ok: true }, { status: 200 });
 
-    // Procesamiento pesado en segundo plano
     processWebhook(body).catch(err =>
-      console.error("❌ ERROR procesando webhook en background:", err)
+      console.error("❌ ERROR background:", err)
     );
 
     return response;
 
   } catch (err) {
-    console.error("❌ ERROR global webhook:", err);
-
-    // Siempre devolver 200 para que MercadoPago no marque error
+    console.error("❌ ERROR global:", err);
     return NextResponse.json({ ok: true }, { status: 200 });
   }
 }
 
-// Función que hace todo el procesamiento
+// 🔥 PROCESAMIENTO REAL
 async function processWebhook(body) {
-  console.log("📦 Procesando webhook en background...");
+  console.log("📦 Procesando webhook...");
 
-  // Obtener paymentId
-  const paymentId = body?.data?.id || body?.id || (body?.resource?.split("/").pop());
+  const paymentId =
+    body?.data?.id ||
+    body?.id ||
+    body?.resource?.split("/").pop();
+
   if (!paymentId) {
-    console.log("⛔ No se pudo obtener paymentId");
+    console.log("⛔ No paymentId");
     return;
   }
+
   console.log("💳 Payment ID:", paymentId);
 
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-  if (!accessToken) {
-    console.log("⛔ No hay access token de Mercado Pago");
-    return;
-  }
+  if (!accessToken) return;
 
-  // Consultar pago en Mercado Pago
+  // 🔎 Obtener pago
   let pago;
   try {
     const mpResponse = await axios.get(
@@ -77,27 +71,38 @@ async function processWebhook(body) {
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
     pago = mpResponse.data;
-    console.log("📦 Datos del pago:", pago);
   } catch (err) {
-    console.log("⚠️ Error consultando MercadoPago:", err?.response?.data || err.message);
+    console.log("❌ Error MP:", err?.response?.data || err.message);
     return;
   }
 
-  const { status, id, transaction_amount, external_reference, metadata } = pago;
+  const {
+    status,
+    id,
+    transaction_amount,
+    external_reference,
+    metadata,
+  } = pago;
 
-  // Verificar si ya existe
+  // 🧠 1. ANTI DUPLICADO HARD
   const { data: pagoExistente } = await supabase
     .from("pagos")
     .select("payment_id")
     .eq("payment_id", Number(id))
-    .single();
+    .maybeSingle();
 
   if (pagoExistente) {
-    console.log("⚠️ Pago ya procesado, abortando");
+    console.log("⚠️ Pago ya procesado");
     return;
   }
 
-  // Insertar pago
+  // 🧠 2. SOLO PAGOS APROBADOS
+  if (status !== "approved") {
+    console.log("⛔ Pago rechazado/no aprobado → no se guarda");
+    return;
+  }
+
+  // 💾 Insertar pago
   const { error: errorInsertPago } = await supabase.from("pagos").insert({
     pago_id: randomUUID(),
     payment_id: Number(id),
@@ -106,19 +111,66 @@ async function processWebhook(body) {
     transaction_amount,
     usuario_id: metadata?.user_id || null,
   });
-  if (errorInsertPago) console.log("❌ Error insertando pago:", errorInsertPago);
-  else console.log("✅ Pago insertado correctamente");
 
-  if (status !== "approved") {
-    console.log("⛔ Pago no aprobado, se detiene el proceso");
+  if (errorInsertPago) {
+    console.log("❌ Error pago:", errorInsertPago);
     return;
   }
 
-  // Crear pedido
+  console.log("✅ Pago guardado");
+
+  // 📦 Datos carrito
   const carrito = metadata?.carrito ?? [];
   const total = metadata?.total ?? 0;
   const userId = metadata?.user_id ?? null;
 
+  if (!external_reference || !userId) {
+    console.log("❌ Falta metadata");
+    return;
+  }
+
+  // 🧠 3. CARRITO TEMPORAL (SIN DUPLICAR)
+  const { data: carritoExistente } = await supabase
+    .from("carritos_temporales")
+    .select("id")
+    .eq("external_reference", external_reference)
+    .maybeSingle();
+
+  if (!carritoExistente) {
+    const { error: errorCarrito } = await supabase
+      .from("carritos_temporales")
+      .insert({
+        id: randomUUID(),
+        external_reference,
+        carrito,
+        user_id: userId,
+        total,
+        fecha_creacion: new Date().toISOString(),
+      });
+
+    if (errorCarrito) {
+      console.log("❌ Error carrito:", errorCarrito);
+      return;
+    }
+
+    console.log("🛒 Carrito temporal guardado");
+  } else {
+    console.log("⚠️ Carrito ya existía");
+  }
+
+  // 🧠 4. PEDIDO DUPLICADO CHECK
+  const { data: pedidoExistente } = await supabase
+    .from("pedidos")
+    .select("pedido_id")
+    .eq("preference_id", external_reference)
+    .maybeSingle();
+
+  if (pedidoExistente) {
+    console.log("⚠️ Pedido ya existe");
+    return;
+  }
+
+  // 🧾 Crear pedido
   const { data: pedido, error: errorPedido } = await supabase
     .from("pedidos")
     .insert({
@@ -133,24 +185,29 @@ async function processWebhook(body) {
     .single();
 
   if (errorPedido) {
-    console.log("❌ Error creando pedido:", errorPedido);
+    console.log("❌ Error pedido:", errorPedido);
     return;
   }
 
-  console.log("📦 Pedido creado:", pedido);
+  console.log("📦 Pedido creado:", pedido.pedido_id);
 
-  // Insertar detalle de pedidos
+  // 📄 Detalles + stock (opcional si querés expandir después)
   for (const item of carrito) {
-    const { error: errorDetalle } = await supabase.from("detalle_pedidos").insert({
-      detalle_pedido_id: randomUUID(),
-      pedido_id: pedido.pedido_id,
-      producto_id: item.producto_id,
-      cantidad: item.cantidad,
-      precio_unitario: item.unit_price,
-    });
-    if (errorDetalle) console.log("❌ Error insertando detalle:", errorDetalle);
-    else console.log("✅ Detalle insertado:", item);
+    const { error: errorDetalle } = await supabase
+      .from("detalle_pedidos")
+      .insert({
+        detalle_pedido_id: randomUUID(),
+        pedido_id: pedido.pedido_id,
+        producto_id: item.producto_id,
+        cantidad: item.cantidad,
+        variante_id: item.variante_id,
+        precio_unitario: item.unit_price,
+      });
+
+    if (errorDetalle) {
+      console.log("❌ Error detalle:", errorDetalle);
+    }
   }
 
-  console.log("🎉 Pedido completo procesado:", pedido.pedido_id);
+  console.log("🎉 Pedido procesado completo:", pedido.pedido_id);
 }
