@@ -4,77 +4,56 @@ import axios from "axios";
 import { supabase } from "@/app/lib/supabase";
 import { randomUUID } from "crypto";
 
-// GET para probar el endpoint
+// GET
 export async function GET() {
-  console.log("🟢 GET /api/order funcionando");
   return NextResponse.json({ ok: true });
 }
 
 // POST webhook
 export async function POST(req) {
   try {
-    let body = {};
+    const body = await req.json();
 
-    try {
-      body = await req.json();
-    } catch {
-      body = {};
-    }
-
-    const url = new URL(req.url);
-    const queryId = url.searchParams.get("id");
-
-    if (queryId && !body?.data?.id) {
-      body.data = { id: queryId };
-    }
-
-    console.log("🚀 WEBHOOK RECIBIDO:", body);
-
-    const response = NextResponse.json({ ok: true }, { status: 200 });
+    console.log("🚀 WEBHOOK:", body);
 
     processWebhook(body).catch(err =>
-      console.error("❌ ERROR background:", err)
+      console.error("❌ ERROR BACKGROUND:", err)
     );
 
-    return response;
+    return NextResponse.json({ ok: true });
 
   } catch (err) {
-    console.error("❌ ERROR global:", err);
-    return NextResponse.json({ ok: true }, { status: 200 });
+    console.error("❌ ERROR GLOBAL:", err);
+    return NextResponse.json({ ok: true });
   }
 }
 
-// 🔥 PROCESAMIENTO REAL
+// PROCESO
 async function processWebhook(body) {
-  console.log("📦 Procesando webhook...");
+  console.log("📦 Procesando...");
 
   const paymentId =
-    body?.data?.id ||
-    body?.id ||
-    body?.resource?.split("/").pop();
+    body?.data?.id || body?.id || body?.resource?.split("/").pop();
 
   if (!paymentId) {
-    console.log("⛔ No paymentId");
+    console.log("⛔ Sin paymentId");
     return;
   }
 
-  console.log("💳 Payment ID:", paymentId);
+  console.log("💳 Payment:", paymentId);
 
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-  if (!accessToken) return;
 
-  // 🔎 Obtener pago
-  let pago;
-  try {
-    const mpResponse = await axios.get(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    pago = mpResponse.data;
-  } catch (err) {
-    console.log("❌ Error MP:", err?.response?.data || err.message);
-    return;
-  }
+  const { data: pagoMP } = await axios.get(
+    `https://api.mercadopago.com/v1/payments/${paymentId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  console.log("📦 MP:", pagoMP.status);
 
   const {
     status,
@@ -82,54 +61,26 @@ async function processWebhook(body) {
     transaction_amount,
     external_reference,
     metadata,
-  } = pago;
+  } = pagoMP;
 
-  // 🧠 1. ANTI DUPLICADO HARD
-  const { data: pagoExistente } = await supabase
-    .from("pagos")
-    .select("payment_id")
-    .eq("payment_id", Number(id))
-    .maybeSingle();
-
-  if (pagoExistente) {
-    console.log("⚠️ Pago ya procesado");
-    return;
-  }
-
-  // 🧠 2. SOLO PAGOS APROBADOS
+  // 🚫 SOLO PROCESAR APROBADOS
   if (status !== "approved") {
-    console.log("⛔ Pago rechazado/no aprobado → no se guarda");
+    console.log("⛔ NO aprobado:", status);
     return;
   }
 
-  // 💾 Insertar pago
-  const { error: errorInsertPago } = await supabase.from("pagos").insert({
-    pago_id: randomUUID(),
-    payment_id: Number(id),
-    status,
-    preference_id: external_reference,
-    transaction_amount,
-    usuario_id: metadata?.user_id || null,
-  });
-
-  if (errorInsertPago) {
-    console.log("❌ Error pago:", errorInsertPago);
-    return;
-  }
-
-  console.log("✅ Pago guardado");
-
-  // 📦 Datos carrito
+  // 🛒 ===============================
+  // 🛒 CARRITO TEMPORAL (NUEVO)
+  // 🛒 ===============================
   const carrito = metadata?.carrito ?? [];
   const total = metadata?.total ?? 0;
   const userId = metadata?.user_id ?? null;
 
   if (!external_reference || !userId) {
-    console.log("❌ Falta metadata");
+    console.log("❌ Falta metadata carrito");
     return;
   }
 
-  // 🧠 3. CARRITO TEMPORAL (SIN DUPLICAR)
   const { data: carritoExistente } = await supabase
     .from("carritos_temporales")
     .select("id")
@@ -141,10 +92,10 @@ async function processWebhook(body) {
       .from("carritos_temporales")
       .insert({
         id: randomUUID(),
-        external_reference,
         carrito,
-        user_id: userId,
         total,
+        user_id: userId,
+        external_reference,
         fecha_creacion: new Date().toISOString(),
       });
 
@@ -155,10 +106,39 @@ async function processWebhook(body) {
 
     console.log("🛒 Carrito temporal guardado");
   } else {
-    console.log("⚠️ Carrito ya existía");
+    console.log("⚠️ Carrito ya existe");
   }
 
-  // 🧠 4. PEDIDO DUPLICADO CHECK
+  // 🚫 EVITAR DUPLICADO DE PAGO
+  const { data: pagoExistente } = await supabase
+    .from("pagos")
+    .select("payment_id")
+    .eq("payment_id", Number(id))
+    .maybeSingle();
+
+  if (pagoExistente) {
+    console.log("⚠️ Pago duplicado");
+    return;
+  }
+
+  // ✅ INSERT PAGO
+  const { error: errorPago } = await supabase.from("pagos").insert({
+    pago_id: randomUUID(),
+    payment_id: Number(id),
+    status,
+    preference_id: external_reference,
+    transaction_amount,
+    usuario_id: metadata?.user_id || null,
+  });
+
+  if (errorPago) {
+    console.log("❌ Error pago:", errorPago);
+    return;
+  }
+
+  console.log("✅ Pago guardado");
+
+  // 🚫 EVITAR PEDIDO DUPLICADO
   const { data: pedidoExistente } = await supabase
     .from("pedidos")
     .select("pedido_id")
@@ -166,11 +146,11 @@ async function processWebhook(body) {
     .maybeSingle();
 
   if (pedidoExistente) {
-    console.log("⚠️ Pedido ya existe");
+    console.log("⚠️ Pedido duplicado");
     return;
   }
 
-  // 🧾 Crear pedido
+  // ✅ CREAR PEDIDO
   const { data: pedido, error: errorPedido } = await supabase
     .from("pedidos")
     .insert({
@@ -189,25 +169,25 @@ async function processWebhook(body) {
     return;
   }
 
-  console.log("📦 Pedido creado:", pedido.pedido_id);
+  console.log("📦 Pedido:", pedido.pedido_id);
 
-  // 📄 Detalles + stock (opcional si querés expandir después)
+  // ✅ DETALLE
   for (const item of carrito) {
-    const { error: errorDetalle } = await supabase
+    const { error } = await supabase
       .from("detalle_pedidos")
       .insert({
         detalle_pedido_id: randomUUID(),
         pedido_id: pedido.pedido_id,
         producto_id: item.producto_id,
-        cantidad: item.cantidad,
         variante_id: item.variante_id,
+        cantidad: item.cantidad,
         precio_unitario: item.unit_price,
       });
 
-    if (errorDetalle) {
-      console.log("❌ Error detalle:", errorDetalle);
+    if (error) {
+      console.log("❌ Error detalle:", error);
     }
   }
 
-  console.log("🎉 Pedido procesado completo:", pedido.pedido_id);
+  console.log("🎉 TODO OK");
 }
