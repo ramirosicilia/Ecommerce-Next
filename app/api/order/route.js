@@ -4,8 +4,9 @@ import axios from "axios";
 import { supabase } from "../../lib/DB.js";
 import { randomUUID } from "crypto";
 
-// GET
+// GET para probar el endpoint
 export async function GET() {
+  console.log("🟢 GET /api/orden funcionando");
   return NextResponse.json({ ok: true });
 }
 
@@ -13,47 +14,65 @@ export async function GET() {
 export async function POST(req) {
   try {
     const body = await req.json();
+    console.log("🚀 WEBHOOK RECIBIDO:", body);
 
-    console.log("🚀 WEBHOOK:", body);
+    const response = NextResponse.json({ ok: true });
 
     processWebhook(body).catch(err =>
-      console.error("❌ ERROR BACKGROUND:", err)
+      console.error("❌ ERROR procesando webhook en background:", err)
     );
 
-    return NextResponse.json({ ok: true });
-
+    return response;
   } catch (err) {
-    console.error("❌ ERROR GLOBAL:", err);
-    return NextResponse.json({ ok: true });
+    console.error("❌ ERROR global webhook:", err);
+    return NextResponse.json({ ok: false });
   }
 }
 
-// PROCESO
+// Función que hace todo el procesamiento
 async function processWebhook(body) {
-  console.log("📦 Procesando...");
+  console.log("📦 Procesando webhook en background...");
 
   const paymentId =
     body?.data?.id || body?.id || body?.resource?.split("/").pop();
 
   if (!paymentId) {
-    console.log("⛔ Sin paymentId");
+    console.log("⛔ No se pudo obtener paymentId");
     return;
   }
 
-  console.log("💳 Payment:", paymentId);
+  console.log("💳 Payment ID:", paymentId);
 
   const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
-  const { data: pagoMP } = await axios.get(
-    `https://api.mercadopago.com/v1/payments/${paymentId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    }
-  );
+  if (!accessToken) {
+    console.log("⛔ No hay access token de Mercado Pago");
+    return;
+  }
 
-  console.log("📦 MP:", pagoMP.status);
+  // Consultar pago en Mercado Pago
+  let pago;
+
+  try {
+    const mpResponse = await axios.get(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    pago = mpResponse.data;
+
+    console.log("📦 Datos del pago:", pago);
+  } catch (err) {
+    console.log(
+      "⚠️ Error consultando MercadoPago:",
+      err?.response?.data || err.message
+    );
+    return;
+  }
 
   const {
     status,
@@ -61,68 +80,35 @@ async function processWebhook(body) {
     transaction_amount,
     external_reference,
     metadata,
-  } = pagoMP;
+    date_created,
+  } = pago;
 
-  // 🚫 SOLO PROCESAR APROBADOS
-  if (status !== "approved") {
-    console.log("⛔ NO aprobado:", status);
+  console.log("💰 Status:", status);
+
+  // 🔒 PROTECCIÓN PAGOS VIEJOS
+  const fechaPago = new Date(date_created);
+  const ahora = new Date();
+  const diferenciaMin = (ahora - fechaPago) / 1000 / 60;
+
+  if (diferenciaMin > 10) {
+    console.log("⛔ Pago viejo reenviado por MercadoPago, ignorando");
     return;
   }
 
-  // 🛒 ===============================
-  // 🛒 CARRITO TEMPORAL (NUEVO)
-  // 🛒 ===============================
-  const carrito = metadata?.carrito ?? [];
-  const total = metadata?.total ?? 0;
-  const userId = metadata?.user_id ?? null;
-
-  if (!external_reference || !userId) {
-    console.log("❌ Falta metadata carrito");
-    return;
-  }
-
-  const { data: carritoExistente } = await supabase
-    .from("carritos_temporales")
-    .select("id")
-    .eq("external_reference", external_reference)
-    .maybeSingle();
-
-  if (!carritoExistente) {
-    const { error: errorCarrito } = await supabase
-      .from("carritos_temporales")
-      .insert({
-        id: randomUUID(),
-        carrito,
-        total,
-        user_id: userId,
-        external_reference,
-        fecha_creacion: new Date().toISOString(),
-      });
-
-    if (errorCarrito) {
-      console.log("❌ Error carrito:", errorCarrito);
-      return;
-    }
-
-    console.log("🛒 Carrito temporal guardado");
-  } else {
-    console.log("⚠️ Carrito ya existe");
-  }
-
-  // 🚫 EVITAR DUPLICADO DE PAGO
+  // Verificar si el pago ya existe
   const { data: pagoExistente } = await supabase
     .from("pagos")
     .select("payment_id")
     .eq("payment_id", Number(id))
-    .maybeSingle();
+    .single();
 
   if (pagoExistente) {
-    console.log("⚠️ Pago duplicado");
+    console.log("⚠️ Pago ya procesado, abortando");
     return;
   }
 
-  // ✅ INSERT PAGO
-  const { error: errorPago } = await supabase.from("pagos").insert({
+  // Insertar pago
+  const { error: errorInsertPago } = await supabase.from("pagos").insert({
     pago_id: randomUUID(),
     payment_id: Number(id),
     status,
@@ -131,26 +117,34 @@ async function processWebhook(body) {
     usuario_id: metadata?.user_id || null,
   });
 
-  if (errorPago) {
-    console.log("❌ Error pago:", errorPago);
+  if (errorInsertPago) {
+    console.log("❌ Error insertando pago:", errorInsertPago);
+  } else {
+    console.log("✅ Pago insertado correctamente");
+  }
+
+  if (status !== "approved") {
+    console.log("⛔ Pago no aprobado, se detiene el proceso");
     return;
   }
 
-  console.log("✅ Pago guardado");
-
-  // 🚫 EVITAR PEDIDO DUPLICADO
+  // 🔒 PROTECCIÓN PEDIDO DUPLICADO
   const { data: pedidoExistente } = await supabase
     .from("pedidos")
     .select("pedido_id")
     .eq("preference_id", external_reference)
-    .maybeSingle();
+    .single();
 
   if (pedidoExistente) {
-    console.log("⚠️ Pedido duplicado");
+    console.log("⚠️ Pedido ya existe para esta compra, abortando");
     return;
   }
 
-  // ✅ CREAR PEDIDO
+  // Crear pedido
+  const carrito = metadata?.carrito ?? [];
+  const total = metadata?.total ?? 0;
+  const userId = metadata?.user_id ?? null;
+
   const { data: pedido, error: errorPedido } = await supabase
     .from("pedidos")
     .insert({
@@ -165,29 +159,31 @@ async function processWebhook(body) {
     .single();
 
   if (errorPedido) {
-    console.log("❌ Error pedido:", errorPedido);
+    console.log("❌ Error creando pedido:", errorPedido);
     return;
   }
 
-  console.log("📦 Pedido:", pedido.pedido_id);
+  console.log("📦 Pedido creado:", pedido);
 
-  // ✅ DETALLE
+  // Insertar detalle de pedidos
   for (const item of carrito) {
-    const { error } = await supabase
+    const { error: errorDetalle } = await supabase
       .from("detalle_pedidos")
       .insert({
         detalle_pedido_id: randomUUID(),
+        variante_id: item.variante_id,
         pedido_id: pedido.pedido_id,
         producto_id: item.producto_id,
-        variante_id: item.variante_id,
         cantidad: item.cantidad,
         precio_unitario: item.unit_price,
       });
 
-    if (error) {
-      console.log("❌ Error detalle:", error);
+    if (errorDetalle) {
+      console.log("❌ Error insertando detalle:", errorDetalle);
+    } else {
+      console.log("✅ Detalle insertado:", item);
     }
   }
 
-  console.log("🎉 TODO OK");
+  console.log("🎉 Pedido completo procesado:", pedido.pedido_id);
 }
