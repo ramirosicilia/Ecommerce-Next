@@ -1,7 +1,7 @@
 
 import { NextResponse } from "next/server";
 import axios from "axios";
-import { supabase } from "@/app/lib/supabase";
+import { supabase } from "../../lib/DB.js";
 import { randomUUID } from "crypto";
 
 // GET
