@@ -6,7 +6,7 @@ import { randomUUID } from "crypto";
 
 // GET para probar el endpoint
 export async function GET() {
-  console.log("🟢 GET /api/orden funcionando");
+  console.log("🟢 GET /api/order funcionando");
   return NextResponse.json({ ok: true });
 }
 
